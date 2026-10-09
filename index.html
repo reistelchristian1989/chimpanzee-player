@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cr.dev.monkey's Chimpanzee-Player</title>
+    <!-- HLS.js Bibliothek für m3u8 Streaming -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        /* --- GRAFISCHES DESIGN MIT EINGEBETTETEM BILD (BASE64) --- */
+        body {
+            /* Das Hintergrundbild ist als Base64-String direkt eingebunden */
+            background-image: linear-gradient(rgba(255, 0, 0, 0.500), rgba(255, 0, 0, 0.500)), url('assets/backgrounds/background_graph_schanze.JPG');
+            background-size: cover;          /* Bild füllt den ganzen Bildschirm aus */
+            background-position: center;     /* Bild wird zentriert */
+            background-attachment: fixed;    /* Bild bleibt beim Scrollen fixiert */
+            
+            color: #00ffcc;
+            font-family: monospace;
+            padding: 20px;
+        }
+
+        .player-box {
+            /* Leichter Transparenz-Effekt (Glassmorphism), damit man das Bild durchschimmern sieht */
+            background: rgba(30, 30, 30, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #00ffcc;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+
+        video, audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        button {
+            background: #00ffcc;
+            color: #121212;
+            border: none;
+            border-radius: 24px;
+            padding: 8px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 5px 0;
+        }
+
+        button:hover {
+            background: #ff0000;
+            color: #fff;
+        }
+
+        /* --- PLAYLIST CONTAINER LISTE --- */
+        #playlistContainer {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        /* --- DATEI-AUSWAHL BUTTONS IM SELBEN STIL --- */
+        input[type="file"]::file-selector-button {
+            background: #00ffcc;
+            color: #121212;
+            border: none;
+            border-radius: 24px;
+            padding: 8px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-right: 10px;
+            font-family: monospace;
+            transition: background 0.2s;
+        }
+
+        input[type="file"]::file-selector-button:hover {
+            background: #ff0000;
+            color: #fff;
+        }
+
+        /* Für ältere WebKit Browser / Kompatibilität */
+        input[type="file"]::-webkit-file-upload-button {
+            background: #00ffcc;
+            color: #121212;
+            border: none;
+            border-radius: 24px;
+            padding: 8px 12px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-right: 10px;
+            font-family: monospace;
+        }
+
+        input[type="file"]::-webkit-file-upload-button:hover {
+            background: #ff0000;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <h1>cr.dev.monkey's Chimpanzee-Player</h1>
+    <p>Designed & developed with ParrotOS & VS Codium by cr.dev.monkey...</p>
+
+    <!-- Video Sektion -->
+    <div class="player-box">
+        <h3>🎬 Video Player (MP4)</h3>
+        <!-- Ein Datei-Auswahlfeld für Videos -->
+        <input type="file" id="videoFilePicker" accept="video/mp4" multiple>
+        
+        <!-- Video Playlist UI -->
+        <ul id="videoPlaylistUI"></ul>
+
+        <video id="myVideo" controls></video>
+        
+        <!-- Vor-/Zurückspulen & Skip Buttons für Video -->
+        <div style="margin: 10px 0;">
+            <button onclick="skipVideo(-1)">⏮️ Skip Zurück</button>
+            <button onclick="seekVideo(-10)">⏪ -10s</button>
+            <button onclick="seekVideo(10)">⏩ +10s</button>
+            <button onclick="skipVideo(1)">⏭️ Skip Vor</button>
+        </div>
+
+        <button id="toggleVideoAutoplayBtn" onclick="toggleVideoAutoplay()">🔄 Video Autoplay: AN</button>
+        <button onclick="castVideo()">📺 Auf TV spiegeln (Cast/AirPlay)</button>
+    </div>
+
+    <!-- HLS Stream & Playlist Sektion -->
+    <div class="player-box">
+        <h3>📡 HLS Stream & Playlist (.m3u8)</h3>
+        <h4>==&gt;&gt;Bei Neu Laden eines Streams Browser mit "F5 oder Strg + F5" aktuakiesieren (Reset) und neuen Link einfügen!!!&lt;&lt;==</h4>
+        <input type="text" id="hlsUrlInput" placeholder="https://.../stream.m3u8" style="width: 70%; padding: 8px; margin-bottom: 10px; font-family: monospace;">
+        <button id="playHlsUrlBtn">Stream abspielen</button>
+        <br>
+        <label for="hlsFilePicker" style="cursor: pointer; background: #00ffcc; color: #171212; padding: 8px 12px; border-radius: 24px; font-weight: bold; display: inline-block; margin-top: 5px;">M3U8-Datei laden</label>
+        <input type="file" id="hlsFilePicker" accept=".m3u8,.txt" style="display:none;">
+        <span id="hlsFileName" style="margin-left: 10px; font-family: monospace; color: #fff;"></span>
+        <br><br>
+        <video id="hlsVideo" controls style="width: 100%; margin-top: 10px;"></video>
+    </div>
+
+    <!-- MP3 Sektion mit Equalizer -->
+    <div class="player-box">
+        <h3>🎵 MP3 Player & Equalizer</h3>
+        <input type="file" id="audioFilePicker" accept="audio/mp3" multiple>
+        
+        <!-- GENAU EIN EINZIGER AUDIO-PLAYER -->
+        <audio id="myAudio" controls preload="auto"></audio>
+        
+        <!-- Vor-/Zurückspulen & Skip Buttons für Audio -->
+        <div style="margin: 10px 0;">
+            <button onclick="skipAudio(-1)">⏮️ Skip Zurück</button>
+            <button onclick="seekAudio(-10)">⏪ -10s</button>
+            <button onclick="seekAudio(10)">⏩ +10s</button>
+            <button onclick="skipAudio(1)">⏭️ Skip Vor</button>
+        </div>
+
+        <button id="toggleAudioAutoplayBtn" onclick="toggleAudioAutoplay()">🔄 Audio Autoplay: AN</button>
+
+        <ul id="audioPlayListUI"></ul>
+
+        <div class="equalizer-box">
+            <label>Bass (Low): <input type="range" id="bassRange" min="-20" max="20" value="0" step="1"></label><br>
+            <label>Mitten (Mid): <input type="range" id="midRange" min="-20" max="20" value="0" step="1"></label><br>
+            <label>Höhen (High): <input type="range" id="highRange" min="-20" max="20" value="0" step="1"></label>
+        </div>
+    </div>
+
+    <!-- Playlist Speicher Sektion -->
+    <div class="player-box">
+        <h3>💾 Playlist Manager (Local Storage)</h3>
+        <input type="text" id="trackinput" placeholder="Hier Name der Playlist eintragen...">
+        <button onclick="savePlaylist()">Zur Playlist hinzufügen</button>
+        <ul id="playlistContainer"></ul>
+    </div>
+
+    <!-- Impressum Button Sektion -->
+    <div class="player-box" style="text-align: center;">
+        <button onclick="openImpressumModal()">📜 Zum Impressum & Danksagung</button>
+    </div>
+
+    <!-- Sauber überlagertes Impressum Modal -->
+    <div id="impressumModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; overflow-y:auto; padding:20px; box-sizing:border-box;">
+        <div class="player-box" style="max-width:800px; margin: 30px auto; position:relative;">
+            <button onclick="closeImpressumModal()" style="position:absolute; top:15px; right:15px;">❌ Schließen</button>
+
+            <h2>📜 Impressum & Danksagung</h2>
+
+            <p><strong>Projekt-Name:</strong> cr.dev.monkey's MP3 & MP4 Player</p>
+            <p><strong>Entwickelt von:</strong> cr.dev.monkey unter Verwendung von Parrot OS (Betriebssystem-Offensiv security) & VS Codium (Visual studio Code Nativer fester bestandteil in Parrot OS)</p>
+
+            <hr>
+            <h3>🙏 Danksagung & Helfer</h3>
+            <p>Ein 1000'faches Dankeschön geht an alle die dieses Projekt möglich gemacht und mich bei der Entwicklung unterstützt haben:</p>
+
+            <ul>
+                <li><strong>An mich selbst "REISTEL CHRISTIAN" (cr.dev.monkey)</strong> Für die experimentell selbst geschossenen und erstellten iPhone-Kamerabilder (assets/backgrounds),allen Sprayer'n aus Hamburg St.Pauli-Hamburg Sternschanze-Hamburg-Altona sowie aus dem ImmeZentrum in Hannover dank euch habe ich unendlich viele Pic's für meine Projekte und Arbeiten schießen können die sich echt sehen lassen können. Dank euch bin ich diesbezüglich mehr oder weniger unabhängig und nicht auf Grafiken von Drittanbietern angewiesen und dem geduldigen und unermüdlichen Ehrgeiz meiner wenigkeit und Christian Radtke (RAD-Ideenentwicklung,... Randstraße 1 22525 Hamburg) beim Coden! Und dem "CCC & CCCHH" Chaos Computer Club Berlin und Hamburg für alles was ich noch bei von und mit euch lernen kann(Wir sehen uns die Tage bei öffentlichen treffen, freue mich bereits darauf. Ihr werdet mir einsehr guter begleiter während meiner IT-Ausbildungszeit zum Fachinformatiker... sein).</li>
+                <li><strong>Gemini:</strong> Mein Persönlich bester digitaler Lerncomputer und KI-Kollaborateur den ich je hatte!!!("Gemini ist seit es ihn gibt meine Unterstützung zum Lernen während meiner Ausbildung zum Fachinformatiker in der Systemintegration. Der für mich derzeit beste weg um mit viel Praxis zu lernen und auch Theorie durch angewendete Praxis!!! THX ChatGPT ist ein Huansohn!!!") Danke auch vorallem für das Heraussuchen von Code-Snippets und des mühsamen Suchens nach Bibliotheken/Librarys!, und für alles dass ich durch dich Lernen konnte sprich was du mir bis jetzt in kürzester Zeit vermitteln konntest an Wissen!!!</li>
+                <li><strong>Verwendete Technologien:</strong> HTML5, CSS3, JavaScript (Web Audio API, LocalStorage, File API), Capacitor (für den APK-Build), sowie GitHub.com und GitLab.com (Githubs MacServer beispielsweise für die erstellung der IPA's für's iPhone, ihren Repositorys, ihren GitHub Pages etc.) für ihre im vollen Umfang zur Entwicklung von Software, Apps und vieles mehr. sowie Linux Parrot OS & Kali Linux als sicherste Entwicklungsumgebung die ich bis jetzt kennengelernt</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // --- EQUALIZER LOGIK (JavaScript Web Audio API) ---
+        const audioElement = document.getElementById('myAudio');
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let sourceNode, bassFilter, midFilter, highFilter;
+        let isAudioInitialized = false;
+
+        // Autoplay Steuerung
+        let isAudioAutoplay = true;
+        let isVideoAutoplay = true;
+
+        function toggleAudioAutoplay() {
+            isAudioAutoplay = !isAudioAutoplay;
+            const btn = document.getElementById('toggleAudioAutoplayBtn');
+            if (btn) btn.innerText = `🔄 Audio Autoplay: ${isAudioAutoplay ? 'AN' : 'AUS'}`;
+        }
+
+        function toggleVideoAutoplay() {
+            isVideoAutoplay = !isVideoAutoplay;
+            const btn = document.getElementById('toggleVideoAutoplayBtn');
+            if (btn) btn.innerText = `🔄 Video Autoplay: ${isVideoAutoplay ? 'AN' : 'AUS'}`;
+        }
+
+        // Impressum Modal ohne Musik-Stopp
+        function openImpressumModal() {
+            const modal = document.getElementById('impressumModal');
+            if (modal) modal.style.display = 'block';
+        }
+
+        function closeImpressumModal() {
+            const modal = document.getElementById('impressumModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        audioElement.addEventListener('play', () => {
+            if (!isAudioInitialized) {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                sourceNode = audioCtx.createMediaElementSource(audioElement);
+
+                // Filter erstellen für den Sound
+                bassFilter = audioCtx.createBiquadFilter();
+                bassFilter.type = 'lowshelf';
+                bassFilter.frequency.setValueAtTime(200, audioCtx.currentTime);
+
+                midFilter = audioCtx.createBiquadFilter();
+                midFilter.type = 'peaking';
+                midFilter.frequency.setValueAtTime(1500, audioCtx.currentTime);
+
+                highFilter = audioCtx.createBiquadFilter();
+                highFilter.type = 'highshelf';
+                highFilter.frequency.setValueAtTime(3000, audioCtx.currentTime);
+
+                // Verbindung herstellen: Quelle -> Bass -> Mitten -> Höhen -> Boxen
+                sourceNode.connect(bassFilter);
+                bassFilter.connect(midFilter);
+                midFilter.connect(highFilter);
+                highFilter.connect(audioCtx.destination);
+
+                isAudioInitialized = true;
+            }
+        });
+
+        // Regler-Steuerung Verknüpfung
+        const bassRange = document.getElementById('bassRange');
+        const midRange = document.getElementById('midRange');
+        const highRange = document.getElementById('highRange');
+
+        if (bassRange) {
+            bassRange.addEventListener('input', (e) => {
+                if(bassFilter) bassFilter.gain.setValueAtTime(e.target.value, audioCtx.currentTime);
+            });
+        }
+        if (midRange) {
+            midRange.addEventListener('input', (e) => {
+                if (midFilter) midFilter.gain.setValueAtTime(e.target.value, audioCtx.currentTime);
+            });
+        }
+        if (highRange) {
+            highRange.addEventListener('input', (e) => {
+                if (highFilter) highFilter.gain.setValueAtTime(e.target.value, audioCtx.currentTime);
+            });
+        }
+
+        // --- SPUL- UND SKIP-FUNKTIONEN FÜR AUDIO ---
+        function seekAudio(seconds) {
+            if (audioElement) {
+                audioElement.currentTime += seconds;
+            }
+        }
+
+        function skipAudio(direction) {
+            let newIndex = currentAudioIndex + direction;
+            if (newIndex >= 0 && newIndex < loadedTracks.length) {
+                playAudioTrack(newIndex);
+            }
+        }
+
+        // --- SPUL- UND SKIP-FUNKTIONEN FÜR VIDEO ---
+        function seekVideo(seconds) {
+            const videoElement = document.getElementById('myVideo');
+            if (videoElement) {
+                videoElement.currentTime += seconds;
+            }
+        }
+
+        function skipVideo(direction) {
+            let newIndex = currentVideoIndex + direction;
+            if (newIndex >= 0 && newIndex < loadedVideos.length) {
+                playVideoTrack(newIndex);
+            }
+        }
+
+        // --- PLAYLIST SPEICHER-FUNKTION (LOCAL STORAGE) ---
+        function savePlaylist() {
+            const input = document.getElementById('trackinput');
+            if (!input) return;
+            const playlistName = input.value.trim();
+            if(!playlistName) return;
+
+            let savedPlaylists = JSON.parse(localStorage.getItem('myPlaylists')) || [];
+            
+            const newPlaylist = {
+                name: playlistName,
+                songs: loadedTracks.map(t => t.name)
+            };
+
+            savedPlaylists.push(newPlaylist);
+            localStorage.setItem('myPlaylists', JSON.stringify(savedPlaylists));
+
+            input.value = '';
+            loadPlaylistManager();
+
+            alert(
+                `Playlist "${playlistName}" erfolgreich gespeichert!\n\n` +
+                "1. Klicke einfach auf den Namen deiner Playlist im 'Playlist Manager', um die Playlist zu aktivieren.\n" +
+                "2. Über das Papierkorb-Symbol ganz rechts kannst du die Playlist jederzeit wieder löschen.\n" +
+                "3. Sollten Dateien fehlen, wähle sie vorher über 'Dateien auswählen' aus."
+            );
+        }
+
+        function deletePlaylist(index) {
+            let savedPlaylists = JSON.parse(localStorage.getItem('myPlaylists')) || [];
+            const name = typeof savedPlaylists[index] === 'string' ? savedPlaylists[index] : savedPlaylists[index].name;
+
+            if (confirm(`Möchtest du die Playlist "${name}" wirklich löschen?`)) {
+                savedPlaylists.splice(index, 1);
+                localStorage.setItem('myPlaylists', JSON.stringify(savedPlaylists));
+                loadPlaylistManager();
+            }
+        }
+
+        function loadPlaylistManager() {
+            const listContainer = document.getElementById('playlistContainer');
+            if (!listContainer) return;
+            listContainer.innerHTML = '';
+            let savedPlaylists = JSON.parse(localStorage.getItem('myPlaylists')) || [];
+
+            savedPlaylists.forEach((item, index) => {
+                let li = document.createElement('li');
+                li.style.display = 'flex';
+                li.style.justifyContent = 'space-between';
+                li.style.alignItems = 'center';
+                li.style.marginBottom = '5px';
+
+                const name = typeof item === 'string' ? item : item.name;
+
+                let nameSpan = document.createElement('span');
+                nameSpan.innerText = `📂 ${name}`;
+                nameSpan.style.cursor = 'pointer';
+                nameSpan.style.color = '#00ffcc';
+                
+                nameSpan.addEventListener('click', () => {
+                    if (loadedTracks.length > 0) {
+                        playAudioTrack(0);
+                        alert(`Playlist "${name}" geladen und wird gestartet!`);
+                    } else {
+                        alert(`Bitte lade zuerst deine MP3-Dateien über "Dateien auswählen" hoch, um die Playlist "${name}" abzuspielen.`);
+                    }
+                });
+
+                let deleteBtn = document.createElement('button');
+                deleteBtn.innerHTML = '🗑️';
+                deleteBtn.title = 'Diese Playlist löschen';
+                deleteBtn.style.padding = '2px 8px';
+                deleteBtn.style.marginLeft = '10px';
+                deleteBtn.style.borderRadius = '12px';
+                deleteBtn.style.fontSize = '12px';
+
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deletePlaylist(index);
+                });
+
+                li.appendChild(nameSpan);
+                li.appendChild(deleteBtn);
+                listContainer.appendChild(li);
+            });
+        }
+
+        loadPlaylistManager();
+
+        // --- CAST / BILDSCHIRM SPIEGEL SIMULATION ---
+        function castVideo() {
+            const videoElement = document.getElementById('myVideo');
+            if (window.PresentationRequest) {
+                alert("Suche nach verfügbaren Fernsehern (Chromecast / AirPlay via API)...");
+            } else {
+                alert("Starte native Medienübertragung auf verbundene Bildschirme.");
+                if(videoElement && videoElement.requestFullscreen) {
+                    videoElement.requestFullscreen();
+                }
+            }
+        }
+
+        // --- VIDEO AUS DEM INTERNEN SPEICHER LADEN (MIT PLAYLIST UI & AUTOPLAY) ---
+        const videoPicker = document.getElementById('videoFilePicker');
+        const videoElement = document.getElementById('myVideo');
+        const videoPlaylistUI = document.getElementById('videoPlaylistUI');
+        let loadedVideos = [];
+        let currentVideoIndex = 0;
+
+        if (videoPicker) {
+            videoPicker.addEventListener('change', (event) => {
+                const files = event.target.files;
+                loadedVideos = Array.from(files);
+                currentVideoIndex = 0;
+
+                renderVideoPlaylist();
+                if (loadedVideos.length > 0) {
+                    playVideoTrack(currentVideoIndex);
+                }
+            });
+        }
+
+        function playVideoTrack(index) {
+            if (index >= 0 && index < loadedVideos.length && videoElement) {
+                currentVideoIndex = index;
+                videoElement.src = URL.createObjectURL(loadedVideos[index]);
+                videoElement.load();
+                videoElement.play().catch(err => console.log("Video-Wiedergabe bereit."));
+                renderVideoPlaylist();
+            }
+        }
+
+        function renderVideoPlaylist() {
+            if (!videoPlaylistUI) return;
+            videoPlaylistUI.innerHTML = '';
+            
+            loadedVideos.forEach((video, index) => {
+                let li = document.createElement('li');
+                li.innerText = video.name;
+                li.style.cursor = 'pointer';
+                
+                if (index === currentVideoIndex && videoElement.src) {
+                    li.style.color = '#ff0000';
+                    li.style.fontWeight = 'bold';
+                } else {
+                    li.style.color = '#00ffcc';
+                }
+                
+                li.addEventListener('click', () => {
+                    playVideoTrack(index);
+                });
+                
+                videoPlaylistUI.appendChild(li);
+            });
+        }
+
+        if (videoElement) {
+            videoElement.addEventListener('ended', () => {
+                if (isVideoAutoplay && currentVideoIndex + 1 < loadedVideos.length) {
+                    playVideoTrack(currentVideoIndex + 1);
+                }
+            });
+        }
+
+        // --- MEHRERE MP3s AUS DEM SPEICHER LADEN & PLAYLIST ERSTELLEN ---
+        const audioPicker = document.getElementById('audioFilePicker');
+        const audioPlaylistUI = document.getElementById('audioPlaylistUI');
+        let loadedTracks = []; 
+        let currentAudioIndex = 0;
+
+        if (audioPicker) {
+            audioPicker.addEventListener('change', (event) => {
+                const files = event.target.files; 
+                
+                for (let i = 0; i < files.length; i++) {
+                    loadedTracks.push(files[i]);
+                }
+                
+                renderAudioPlaylist();
+            });
+        }
+
+        function playAudioTrack(index) {
+            if (index >= 0 && index < loadedTracks.length) {
+                currentAudioIndex = index;
+                audioElement.src = URL.createObjectURL(loadedTracks[index]);
+                audioElement.load();
+                audioElement.play().catch(err => console.log("Wiedergabe bereit."));
+                renderAudioPlaylist();
+            }
+        }
+
+        function renderAudioPlaylist() {
+            if (!audioPlaylistUI) return;
+            audioPlaylistUI.innerHTML = ''; 
+            
+            loadedTracks.forEach((track, index) => {
+                let li = document.createElement('li');
+                li.innerText = track.name; 
+                li.style.cursor = 'pointer';
+                
+                if (index === currentAudioIndex && audioElement.src) {
+                    li.style.color = '#ff0000';
+                    li.style.fontWeight = 'bold';
+                } else {
+                    li.style.color = '#00ffcc';
+                }
+                
+                li.addEventListener('click', () => {
+                    playAudioTrack(index);
+                });
+                
+                audioPlaylistUI.appendChild(li);
+            });
+        }
+
+        audioElement.addEventListener('ended', () => {
+            if (isAudioAutoplay && currentAudioIndex + 1 < loadedTracks.length) {
+                playAudioTrack(currentAudioIndex + 1);
+            }
+        });
+
+        // ==========================================
+        // --- NEU: HLS STREAM & PLAYLIST LOGIK ---
+        // ==========================================
+        const hlsUrlInput = document.getElementById('hlsUrlInput');
+        const playHlsUrlBtn = document.getElementById('playHlsUrlBtn');
+        const hlsFilePicker = document.getElementById('hlsFilePicker');
+        const hlsFileName = document.getElementById('hlsFileName');
+        const hlsVideo = document.getElementById('hlsVideo');
+
+        function playHlsStream(url) {
+            if (!hlsVideo) return;
+            if (Hls.isSupported()) {
+                const hls = new Hls();
+                hls.loadSource(url);
+                hls.attachMedia(hlsVideo);
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    hlsVideo.play();
+                });
+            } else if (hlsVideo.canPlayType('application/vnd.apple.mpegurl')) {
+                hlsVideo.src = url;
+                hlsVideo.addEventListener('loadedmetadata', function() {
+                    hlsVideo.play();
+                });
+            } else {
+                alert('HLS wird von diesem Browser nicht unterstützt.');
+            }
+        }
+
+        if (playHlsUrlBtn) {
+            playHlsUrlBtn.addEventListener('click', () => {
+                const url = hlsUrlInput ? hlsUrlInput.value.trim() : '';
+                if (url) {
+                    playHlsStream(url);
+                } else {
+                    alert('Bitte gib einen gültigen HLS-Link ein.');
+                }
+            });
+        }
+
+        if (hlsFilePicker) {
+            hlsFilePicker.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    if (hlsFileName) hlsFileName.textContent = file.name;
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const content = e.target.result;
+                        const lines = content.split('\n');
+                        let streamUrl = '';
+                        for (let line of lines) {
+                            line = line.trim();
+                            if (line && !line.startsWith('#')) {
+                                streamUrl = line;
+                                break;
+                            }
+                        }
+                        if (streamUrl) {
+                            playHlsStream(streamUrl);
+                        } else {
+                            alert('Keine gültige Stream-URL in der ausgewählten .m3u8-Datei gefunden.');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
